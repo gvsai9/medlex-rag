@@ -10,7 +10,7 @@ Endpoints:
 """
 
 import json
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,14 +18,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from retrieval.generator import answer_question, answer_question_stream
-from state_tracker import get_tracker
-from ingestion.graph_store import get_graph_store
-
 
 app = FastAPI(
     title="MedLex RAG API",
-    description="FDA drug-label RAG API using Pinecone, Neo4j, MySQL, and Ollama",
+    description="FDA drug-label RAG API using Pinecone, Neo4j, MySQL, and Gemini",
     version="1.0.0",
 )
 
@@ -102,6 +98,10 @@ async def health():
 @app.get("/stats")
 async def stats():
     try:
+        # Lazy imports so server port opens quickly on Render
+        from state_tracker import get_tracker
+        from ingestion.graph_store import get_graph_store
+
         tracker = await get_tracker()
         db_stats = await tracker.stats()
 
@@ -122,6 +122,9 @@ async def stats():
 @app.post("/ask", response_model=AskResponse)
 async def ask(req: AskRequest):
     try:
+        # Lazy import so app startup does not load torch/BGE/retriever
+        from retrieval.generator import answer_question
+
         result = await answer_question(
             question=req.question,
             drug=req.drug,
@@ -145,6 +148,9 @@ async def ask(req: AskRequest):
 async def ask_stream(req: AskRequest):
     async def event_generator():
         try:
+            # Lazy import so app startup does not load torch/BGE/retriever
+            from retrieval.generator import answer_question_stream
+
             async for event in answer_question_stream(
                 question=req.question,
                 drug=req.drug,
@@ -171,5 +177,4 @@ async def ask_stream(req: AskRequest):
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    # Optional cleanup if your stores have close methods.
     pass
